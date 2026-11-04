@@ -1,6 +1,6 @@
 import type { Inbound, UserWithInbounds } from "./types.js";
 import { configName } from "./links.js";
-import { resolveAddress, addressPort, sniFor, hostFor } from "./links.js";
+import { resolveAddress, resolvePort, sniFor, hostFor } from "./links.js";
 
 interface Ctx {
   host: string;
@@ -32,7 +32,7 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
       name,
       type: "vless",
       server: addr,
-      port: addressPort(addr),
+      port: resolvePort(inbound, host),
       uuid: user.uuid,
       udp: true,
       tls: true,
@@ -50,7 +50,7 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
       name,
       type: "vmess",
       server: addr,
-      port: addressPort(addr),
+      port: resolvePort(inbound, host),
       uuid: user.uuid,
       alterId: 0,
       cipher: "auto",
@@ -67,7 +67,7 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
     name,
     type: "trojan",
     server: addr,
-    port: addressPort(addr),
+    port: resolvePort(inbound, host),
     password: user.password,
     udp: true,
     sni: servername,
@@ -135,7 +135,7 @@ function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
       type: "vless",
       tag,
       server: addr,
-      server_port: addressPort(addr),
+      server_port: resolvePort(inbound, host),
       uuid: user.uuid,
       tls,
       transport,
@@ -146,7 +146,7 @@ function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
       type: "vmess",
       tag,
       server: addr,
-      server_port: addressPort(addr),
+      server_port: resolvePort(inbound, host),
       uuid: user.uuid,
       alter_id: 0,
       security: "auto",
@@ -158,7 +158,7 @@ function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
     type: "trojan",
     tag,
     server: addr,
-    server_port: addressPort(addr),
+    server_port: resolvePort(inbound, host),
     password: user.password,
     tls,
     transport,

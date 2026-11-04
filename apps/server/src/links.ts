@@ -144,22 +144,38 @@ export function buildLink(ctx: LinkContext): string {
   }
 }
 
+/**
+ * Split an address override ("1.2.3.4", "1.2.3.4:8080", "example.com:8443")
+ * into a host and port. When no ":port" is present, the port falls back to
+ * 443 (the TLS edge). This lets a relay picked from the list (stored as
+ * "ip:port") be emitted correctly instead of a malformed "ip:port:port".
+ */
+export function splitAddress(address: string): { host: string; port: number } {
+  const a = (address || "").trim();
+  const idx = a.lastIndexOf(":");
+  if (idx > 0) {
+    const p = Number(a.slice(idx + 1));
+    if (Number.isInteger(p) && p > 0 && p <= 65535) {
+      return { host: a.slice(0, idx), port: p };
+    }
+  }
+  return { host: a, port: 443 };
+}
+
 /** Per-inbound custom address wins, then the global clean_address, then the request host. */
 export function resolveAddress(inbound: Inbound, host: string): string {
   const custom = (inbound.address || "").trim();
-  if (custom) return custom;
+  if (custom) return splitAddress(custom).host;
   const clean = (getSetting("clean_address") || "").trim();
-  return clean || host;
+  return clean ? splitAddress(clean).host : host;
 }
 
-/** Extract a ":port" from an address override; falls back to 443. */
-export function addressPort(address: string): number {
-  const idx = address.lastIndexOf(":");
-  if (idx > 0) {
-    const p = Number(address.slice(idx + 1));
-    if (Number.isInteger(p) && p > 0 && p <= 65535) return p;
-  }
-  return 443;
+/** Port for an inbound's effective server (custom override, clean_address, or 443). */
+export function resolvePort(inbound: Inbound, host: string): number {
+  const custom = (inbound.address || "").trim();
+  if (custom) return splitAddress(custom).port;
+  const clean = (getSetting("clean_address") || "").trim();
+  return clean ? splitAddress(clean).port : 443;
 }
 
 /** Per-inbound TLS SNI override (falls back to the request host). */
@@ -181,7 +197,7 @@ export function buildUserLinks(
     .filter((ib) => ib.enabled && user.inbound_ids.includes(ib.id))
     .map((inbound) => {
       const address = resolveAddress(inbound, host);
-      const port = addressPort(address);
+      const port = resolvePort(inbound, host);
       return {
         tag: inbound.tag,
         protocol: inbound.protocol,
