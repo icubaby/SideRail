@@ -1,6 +1,5 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Dice5, KeyRound, ChevronDown, Settings2, Globe, Plus, X } from "lucide-react";
+import { Dice5, KeyRound, ChevronDown, Settings2, Eye, EyeOff, Plus, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { NumberInput } from "@/components/ui/number-input";
 import {
   Select,
@@ -20,10 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
+import { ConnectedIps } from "@/components/users/connected-ips";
 import { useI18n, type TKey } from "@/lib/i18n";
-import { cn, relativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type {
   Inbound,
   TrafficReset,
@@ -119,43 +117,6 @@ function randomToken(len: number): string {
   return out;
 }
 
-function ConnectedIps({ userId }: { userId: number }) {
-  const { t } = useI18n();
-  const { data: ips = [] } = useQuery({
-    queryKey: ["client-ips", userId],
-    queryFn: () => api.clientIps(userId),
-    refetchInterval: 5000,
-  });
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Globe className="h-4 w-4 text-main" />
-        <Label>{t("connectedIps")}</Label>
-        <Badge variant="info" className="text-[10px]">
-          {ips.length} {t("activeCount")}
-        </Badge>
-      </div>
-      {ips.length === 0 ? (
-        <p className="rounded-base border-2 border-dashed border-border/40 px-3 py-2 text-xs text-text/50">
-          {t("noConnections")}
-        </p>
-      ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {ips.map((entry) => (
-            <div
-              key={entry.ip}
-              className="flex items-center justify-between gap-2 rounded-base border-2 border-border bg-bg/40 px-2.5 py-1.5"
-            >
-              <span className="truncate font-mono text-xs">{entry.ip}</span>
-              <span className="shrink-0 text-[10px] text-text/50">{relativeTime(entry.last_seen)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function UserFormDialog({
   open,
   onOpenChange,
@@ -179,11 +140,13 @@ export function UserFormDialog({
   const [echConfig, setEchConfig] = React.useState("");
   const [inboundIds, setInboundIds] = React.useState<number[]>([]);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [showIps, setShowIps] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
     setShowAdvanced(false);
+    setShowIps(false);
     if (editing) {
       setEmail(editing.email);
       setUuid(editing.uuid);
@@ -431,8 +394,26 @@ export function UserFormDialog({
                 </div>
                 <div className="space-y-2">
                   <Label>{t("ipLimit")}</Label>
-                  <NumberInput value={ipLimit} onChange={setIpLimit} step={1} />
+                  <div className="flex gap-1.5">
+                    <NumberInput
+                      value={ipLimit}
+                      onChange={setIpLimit}
+                      step={1}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant={showIps ? "default" : "neutral"}
+                      size="icon"
+                      onClick={() => setShowIps((v) => !v)}
+                      title={t("viewIps")}
+                      className="h-10 w-10 shrink-0"
+                    >
+                      {showIps ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
                   <p className="text-[11px] text-text/50">{t("ipLimitHint")}</p>
+                  {showIps && editing && <ConnectedIps userId={editing.id} />}
                 </div>
                 <div className="space-y-2">
                   <Label>Traffic reset</Label>

@@ -15,7 +15,7 @@ import https from "node:https";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { config } from "./config.js";
-import { buildCoreConfig } from "./core-config.js";
+import { buildCoreConfig } from "./core-settings.js";
 import { db } from "./db.js";
 import { realIpForPort } from "./tunnel.js";
 
@@ -347,8 +347,10 @@ export function collectClientIps(): void {
 
 export function getClientIps(userId: number): { ip: string; last_seen: number }[] {
   return db
-    .prepare("SELECT ip, last_seen FROM client_ips WHERE user_id = ? ORDER BY last_seen DESC")
-    .all(userId) as { ip: string; last_seen: number }[];
+    .prepare(
+      "SELECT ip, last_seen FROM client_ips WHERE user_id = ? AND last_seen > ? ORDER BY last_seen DESC",
+    )
+    .all(userId, Date.now() - 5 * 60_000) as { ip: string; last_seen: number }[];
 }
 
 export function enforceIpLimits(): void {
