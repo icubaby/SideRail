@@ -32,7 +32,7 @@
 
 **A bold, neobrutalist control panel — shipped to&nbsp;<a href="https://railway.app"><img src=".github/badges/link-railway.svg" alt="Railway" height="22" valign="middle" /></a>&nbsp;in one click.**
 
-*Clean dashboards. Live stats. Gorgeous pages. No config, no fuss.*
+*Clean dashboards. Live stats. Gorgeous pages. No setup, no fuss.*
 
 </div>
 
@@ -102,7 +102,7 @@ The Owner adds Admins with scoped page access and personal data quotas — and e
 </tr>
 <tr>
 <td valign="top"><b>Subscription</b></td>
-<td>A gorgeous per-user page with a live usage chart, QR codes and a base64 export for clients — with correct clash and sing-box configs.</td>
+<td>A gorgeous per-user page with a live usage chart, QR codes and a base64 export for clients — with importable profiles for popular clients such as Clash and sing-box.</td>
 </tr>
 <tr>
 <td valign="top"><b>Security</b></td>
@@ -153,25 +153,25 @@ The Owner adds Admins with scoped page access and personal data quotas — and e
 
 ```
 apps/
-├─ web/           React + Vite + Tailwind (neobrutalism) frontend
-│  └─ src/
-│     ├─ components/ui/   Reusable neobrutalist primitives
-│     ├─ pages/           Dashboard · Users · Inbounds · Activity · Settings · Setup · Login · Subscription
-│     └─ lib/             API client, auth context, helpers
-└─ server/        Express + Node (node:sqlite) backend
-   └─ src/
-      ├─ core.ts          Binary fetch, process manager, traffic stats, client IPs
-      ├─ core-config.ts   Config builder (sniffing fully disabled)
-      ├─ tunnel.ts        WS/HTTPUpgrade via net.Socket, XHTTP via http-proxy
-      ├─ links.ts         Connection link generation
-      ├─ inbounds.ts      Default inbound seeding + enable/disable
-      ├─ users.ts         User model, traffic reset, sub-token logic
-      ├─ auth.ts          Owner/Admin roles, permissions, sessions
-      ├─ ratelimit.ts     Rate limiting / brute-force protection
-      └─ routes.ts        Authenticated REST API
+└── web/           React + Vite + Tailwind (neobrutalism) frontend
+    └── src/
+        ├── components/ui/   Reusable neobrutalist primitives
+        ├── pages/           Dashboard · Users · Inbounds · Activity · Settings · Setup · Login · Subscription
+        └── lib/             API client, auth context, helpers
+└── server/        Express + Node (node:sqlite) backend
+    └── src/
+        ├── core.ts          Binary fetch, process manager, traffic stats, client IPs
+        ├── core-settings.ts   Runtime settings builder (sniffing disabled)
+        ├── tunnel.ts        WS/HTTPUpgrade via net.Socket, XHTTP via an HTTP relay
+        ├── links.ts         Connection link generation
+        ├── inbounds.ts      Default inbound seeding + enable/disable
+        ├── users.ts         User model, traffic reset, sub-token logic
+        ├── auth.ts          Owner/Admin roles, permissions, sessions
+        ├── ratelimit.ts     Rate limiting / brute-force protection
+        └── routes.ts        Authenticated REST API
 ```
 
-**How traffic flows** — TLS is terminated at the Railway edge; all connections use `security=tls` on port `443`. The Node process routes **WebSocket/HTTPUpgrade** to the core engine via raw `net.Socket`, and **XHTTP** through an HTTP proxy. Only HTTP-based transports are supported — anything that can't survive the edge is intentionally left out.
+**How traffic flows** — TLS is terminated at the Railway edge; all connections use `security=tls` on port `443`. The Node process routes **WebSocket/HTTPUpgrade** to the core engine via raw `net.Socket`, and **XHTTP** via an HTTP relay. Only HTTP-based transports are supported — anything that can't survive the edge is intentionally left out.
 
 <br/>
 
