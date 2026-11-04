@@ -1,6 +1,18 @@
 export type Protocol = "vless" | "vmess" | "trojan";
 export type Transport = "ws" | "xhttp" | "httpupgrade";
 export type TrafficReset = "never" | "daily" | "weekly" | "monthly";
+export type ProxyType = "socks4" | "socks5" | "http";
+
+/** A SOCKS4/5 or HTTP proxy entry used as a per-inbound address override. */
+export interface ProxyItem {
+  ip: string;
+  port: number;
+  type: ProxyType;
+  /** ISO 3166-1 alpha-2 country code, empty when unknown. */
+  country?: string;
+  /** Last known ping latency in ms (0 = unreachable). */
+  ms?: number;
+}
 
 export type Permission =
   | "dashboard"
@@ -42,7 +54,9 @@ export interface Inbound {
   port: number;
   path: string;
   host: string;
+  sni: string;
   address: string;
+  proxies: ProxyItem[];
   enabled: number;
   created_at: number;
 }

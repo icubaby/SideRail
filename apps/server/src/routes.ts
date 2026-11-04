@@ -30,7 +30,7 @@ import {
 } from "./auth.js";
 import { db, getSetting, setSetting } from "./db.js";
 import { getSystemStats } from "./system.js";
-import { listInbounds, setInboundEnabled, setInboundAddress, getInbound } from "./inbounds.js";
+import { listInbounds, updateInbound, getInbound } from "./inbounds.js";
 import {
   listUsers,
   createUser,
@@ -54,6 +54,8 @@ import {
 } from "./routing.js";
 import { DOMAIN_PRESETS, COUNTRY_IP_PRESETS } from "./routing-presets.js";
 import { getBotConfig, saveBotConfig, testBot } from "./bot.js";
+import { PROXY_SOURCES, scanProxies, testProxy, geocodeProxy } from "./feeds.js";
+import type { ProxyItem } from "./types.js";
 
 export const api = Router();
 
@@ -170,25 +172,111 @@ api.get("/inbounds", (_req, res) => {
 
 api.patch("/inbounds/:id", requirePermission("inbounds"), async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
+  const proxyItem = z.object({
+    ip: z.string().min(1).max(45),
+    port: z.number().int().min(1).max(65535),
+    type: z.enum(["socks4", "socks5", "http"]),
+    country: z.string().max(10).optional(),
+    ms: z.number().int().min(0).optional(),
+  });
   const body = z
-    .object({ enabled: z.boolean().optional(), address: z.string().max(255).optional() })
-    .refine((b) => b.enabled !== undefined || b.address !== undefined, {
-      message: "nothing to update",
+    .object({
+      enabled: z.boolean().optional(),
+      address: z.string().max(255).optional(),
+      host: z.string().max(255).optional(),
+      sni: z.string().max(255).optional(),
+      proxies: z.array(proxyItem).optional(),
     })
+    .refine(
+      (b) =>
+        b.enabled !== undefined ||
+        b.address !== undefined ||
+        b.host !== undefined ||
+        b.sni !== undefined ||
+        b.proxies !== undefined,
+      { message: "nothing to update" },
+    )
     .safeParse(req.body);
   if (!body.success || !getInbound(id)) {
     res.status(400).json({ error: "invalid" });
     return;
   }
-  if (body.data.enabled !== undefined) setInboundEnabled(id, body.data.enabled);
-  if (body.data.address !== undefined) {
-    setInboundAddress(id, body.data.address);
-    logActivity(req.admin!.username, "inbound_address", `#${id} -> ${body.data.address.trim()}`);
-  } else {
-    logActivity(req.admin!.username, "inbound_toggle", `#${id} -> ${body.data.enabled}`);
+  const data = body.data;
+  const edited = data.address !== undefined || data.host !== undefined || data.sni !== undefined || data.proxies !== undefined;
+  updateInbound(id, data);
+  if (edited) {
+    const detail = [
+      data.address !== undefined ? `address=${data.address.trim() || "(auto)"}` : "",
+      data.host !== undefined ? `host=${data.host.trim() || "(auto)"}` : "",
+      data.sni !== undefined ? `sni=${data.sni.trim() || "(auto)"}` : "",
+      data.proxies !== undefined ? `proxies=${(data.proxies as ProxyItem[]).length}` : "",
+      data.enabled !== undefined ? `enabled=${data.enabled}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    logActivity(req.admin!.username, edited ? "inbound_edit" : "inbound_toggle", `#${id} ${detail}`);
   }
   restartCore();
   res.json({ ok: true });
+});
+
+api.get("/proxies/sources", requirePermission("inbounds"), (_req, res) => {
+  res.json({ sources: PROXY_SOURCES.map((s) => ({ id: s.id, label: s.label })) });
+});
+
+api.post("/proxies/scan", requirePermission("inbounds"), async (req: AuthedRequest, res) => {
+  const body = z.object({ source: z.string().min(1) }).safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "invalid input" });
+    return;
+  }
+  if (!PROXY_SOURCES.some((s) => s.id === body.data.source)) {
+    res.status(400).json({ error: "unknown source" });
+    return;
+  }
+  try {
+    const proxies = await scanProxies(body.data.source);
+    logActivity(req.admin!.username, "proxy_scan", `${body.data.source} (${proxies.length})`);
+    res.json({ proxies });
+  } catch (e) {
+    res.status(502).json({ error: (e as Error).message });
+  }
+});
+
+api.post("/proxies/test", requirePermission("inbounds"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      ip: z.string().min(1).max(45),
+      port: z.number().int().min(1).max(65535),
+    })
+    .safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "invalid input" });
+    return;
+  }
+  const result = await testProxy(body.data.ip, body.data.port);
+  res.json(result);
+});
+
+api.post("/proxies/check", requirePermission("inbounds"), async (req: AuthedRequest, res) => {
+  const body = z
+    .object({
+      ip: z.string().min(1).max(45),
+      port: z.number().int().min(1).max(65535),
+      type: z.enum(["socks4", "socks5", "http"]),
+    })
+    .safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "invalid input" });
+    return;
+  }
+  try {
+    const item = await geocodeProxy(body.data);
+    res.json({ ok: true, item });
+  } catch {
+    // Geolocation is best-effort; still accept the manual proxy without a country.
+    res.json({ ok: true, item: body.data });
+  }
 });
 
 function scopeFor(req: AuthedRequest): number | undefined {

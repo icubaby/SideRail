@@ -64,10 +64,36 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
     }),
-  updateInbound: (id: number, patch: { enabled?: boolean; address?: string }) =>
+  updateInbound: (
+    id: number,
+    patch: {
+      enabled?: boolean;
+      address?: string;
+      host?: string;
+      sni?: string;
+      proxies?: import("./types").ProxyItem[];
+    },
+  ) =>
     request(`/api/inbounds/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
+    }),
+  proxySources: () =>
+    request<{ sources: { id: string; label: string }[] }>("/api/proxies/sources"),
+  proxyScan: (source: string) =>
+    request<{ proxies: import("./types").ProxyItem[] }>("/api/proxies/scan", {
+      method: "POST",
+      body: JSON.stringify({ source }),
+    }),
+  proxyTest: (ip: string, port: number) =>
+    request<{ ok: boolean; ms: number }>("/api/proxies/test", {
+      method: "POST",
+      body: JSON.stringify({ ip, port }),
+    }),
+  proxyCheck: (ip: string, port: number, type: import("./types").ProxyType) =>
+    request<{ ok: boolean; item: import("./types").ProxyItem }>("/api/proxies/check", {
+      method: "POST",
+      body: JSON.stringify({ ip, port, type }),
     }),
   users: () =>
     request<{ users: import("./types").User[]; summary: import("./types").UserSummary }>(

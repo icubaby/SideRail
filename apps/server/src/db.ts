@@ -34,7 +34,9 @@ export function migrate(): void {
       port INTEGER NOT NULL,
       path TEXT NOT NULL,
       host TEXT NOT NULL DEFAULT '',
+      sni TEXT NOT NULL DEFAULT '',
       address TEXT NOT NULL DEFAULT '',
+      proxies TEXT NOT NULL DEFAULT '[]',
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL
     );
@@ -139,8 +141,15 @@ function migrateColumns(): void {
   if (!names.includes("comment")) db.exec("ALTER TABLE admins ADD COLUMN comment TEXT NOT NULL DEFAULT ''");
 
   const inbCols = db.prepare("PRAGMA table_info(inbounds)").all() as { name: string }[];
-  if (!inbCols.map((c) => c.name).includes("address")) {
+  const inbNames = inbCols.map((c) => c.name);
+  if (!inbNames.includes("address")) {
     db.exec("ALTER TABLE inbounds ADD COLUMN address TEXT NOT NULL DEFAULT ''");
+  }
+  if (!inbNames.includes("sni")) {
+    db.exec("ALTER TABLE inbounds ADD COLUMN sni TEXT NOT NULL DEFAULT ''");
+  }
+  if (!inbNames.includes("proxies")) {
+    db.exec("ALTER TABLE inbounds ADD COLUMN proxies TEXT NOT NULL DEFAULT '[]'");
   }
 
   const userCols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];

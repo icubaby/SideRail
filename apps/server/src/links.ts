@@ -14,6 +14,9 @@ import type { Inbound, UserWithInbounds } from "./types.js";
 interface LinkContext {
   host: string;
   address: string;
+  port: number;
+  hostHeader: string;
+  sni: string;
   user: UserWithInbounds;
   inbound: Inbound;
 }
@@ -66,11 +69,11 @@ function antiDpiQuery(user: UserWithInbounds): Record<string, string> {
 }
 
 function commonQuery(ctx: LinkContext): Record<string, string> {
-  const { inbound, user, host } = ctx;
+  const { inbound, user, sni, hostHeader } = ctx;
   const q: Record<string, string> = {
     security: "tls",
-    sni: host,
-    host,
+    sni,
+    host: hostHeader,
     fp: user.fingerprint || "chrome",
   };
   q.type = inbound.transport === "xhttp" ? "xhttp" : inbound.transport;
@@ -93,36 +96,36 @@ function qs(params: Record<string, string>): string {
 }
 
 function vlessLink(ctx: LinkContext): string {
-  const { user, address } = ctx;
+  const { user, address, port } = ctx;
   const query = qs({ ...commonQuery(ctx), encryption: "none" });
-  return `vless://${user.uuid}@${address}:443?${query}#${encodeURIComponent(label(user))}`;
+  return `vless://${user.uuid}@${address}:${port}?${query}#${encodeURIComponent(label(user))}`;
 }
 
 function trojanLink(ctx: LinkContext): string {
-  const { user, address } = ctx;
+  const { user, address, port } = ctx;
   const query = qs(commonQuery(ctx));
-  return `trojan://${encodeURIComponent(user.password)}@${address}:443?${query}#${encodeURIComponent(
+  return `trojan://${encodeURIComponent(user.password)}@${address}:${port}?${query}#${encodeURIComponent(
     label(user),
   )}`;
 }
 
 function vmessLink(ctx: LinkContext): string {
-  const { user, inbound, host, address } = ctx;
+  const { user, inbound, port, hostHeader, sni } = ctx;
   const isXhttp = inbound.transport === "xhttp";
   const obj = {
     v: "2",
     ps: label(user),
-    add: address,
-    port: "443",
+    add: ctx.address,
+    port: String(port),
     id: user.uuid,
     aid: "0",
     scy: "auto",
     net: isXhttp ? "xhttp" : inbound.transport,
     type: "none",
-    host,
+    host: hostHeader,
     path: inbound.path,
     tls: "tls",
-    sni: host,
+    sni,
     alpn: isXhttp ? "h2,http/1.1" : "http/1.1",
     fp: user.fingerprint || "chrome",
     ...antiDpiQuery(user),
@@ -141,13 +144,32 @@ export function buildLink(ctx: LinkContext): string {
   }
 }
 
-function resolveAddress(inbound: Inbound, host: string): string {
-  // Per-inbound custom address wins, then the global clean_address
-  // setting, then the request host (domain).
+/** Per-inbound custom address wins, then the global clean_address, then the request host. */
+export function resolveAddress(inbound: Inbound, host: string): string {
   const custom = (inbound.address || "").trim();
   if (custom) return custom;
   const clean = (getSetting("clean_address") || "").trim();
   return clean || host;
+}
+
+/** Extract a ":port" from an address override; falls back to 443. */
+export function addressPort(address: string): number {
+  const idx = address.lastIndexOf(":");
+  if (idx > 0) {
+    const p = Number(address.slice(idx + 1));
+    if (Number.isInteger(p) && p > 0 && p <= 65535) return p;
+  }
+  return 443;
+}
+
+/** Per-inbound TLS SNI override (falls back to the request host). */
+export function sniFor(inbound: Inbound, host: string): string {
+  return (inbound.sni || "").trim() || host;
+}
+
+/** Per-inbound Host header override (falls back to the request host). */
+export function hostFor(inbound: Inbound, host: string): string {
+  return (inbound.host || "").trim() || host;
 }
 
 export function buildUserLinks(
@@ -157,10 +179,22 @@ export function buildUserLinks(
 ): { tag: string; protocol: string; transport: string; link: string }[] {
   return inbounds
     .filter((ib) => ib.enabled && user.inbound_ids.includes(ib.id))
-    .map((inbound) => ({
-      tag: inbound.tag,
-      protocol: inbound.protocol,
-      transport: inbound.transport,
-      link: buildLink({ host, address: resolveAddress(inbound, host), user, inbound }),
-    }));
+    .map((inbound) => {
+      const address = resolveAddress(inbound, host);
+      const port = addressPort(address);
+      return {
+        tag: inbound.tag,
+        protocol: inbound.protocol,
+        transport: inbound.transport,
+        link: buildLink({
+          host,
+          address,
+          port,
+          hostHeader: hostFor(inbound, host),
+          sni: sniFor(inbound, host),
+          user,
+          inbound,
+        }),
+      };
+    });
 }

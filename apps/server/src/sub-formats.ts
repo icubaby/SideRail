@@ -1,13 +1,6 @@
 import type { Inbound, UserWithInbounds } from "./types.js";
-import { getSetting } from "./db.js";
 import { configName } from "./links.js";
-
-function cleanAddr(inbound: Inbound, host: string): string {
-  const custom = (inbound.address || "").trim();
-  if (custom) return custom;
-  const clean = (getSetting("clean_address") || "").trim();
-  return clean || host;
-}
+import { resolveAddress, addressPort, sniFor, hostFor } from "./links.js";
 
 interface Ctx {
   host: string;
@@ -21,13 +14,15 @@ function net(inbound: Inbound): string {
 
 function clashProxy(ctx: Ctx): Record<string, unknown> | null {
   const { user, inbound, host } = ctx;
-  const addr = cleanAddr(inbound, host);
+  const addr = resolveAddress(inbound, host);
+  const hostHeader = hostFor(inbound, host);
+  const servername = sniFor(inbound, host);
   // Clash proxy names must be unique, so the inbound tag stays as a suffix.
   const name = `${configName(user)} - ${inbound.tag}`;
   const alpn = user.alpn ? user.alpn.split(",").map((a) => a.trim()) : undefined;
   const wsOpts = {
     path: inbound.path,
-    headers: { Host: host },
+    headers: { Host: hostHeader },
   };
 
   if (inbound.protocol === "vless") {
@@ -37,16 +32,16 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
       name,
       type: "vless",
       server: addr,
-      port: 443,
+      port: addressPort(addr),
       uuid: user.uuid,
       udp: true,
       tls: true,
-      servername: host,
+      servername,
       network: httpupgrade ? "httpupgrade" : "ws",
       "client-fingerprint": user.fingerprint || "chrome",
       alpn,
       ...(httpupgrade
-        ? { "httpupgrade-opts": { path: inbound.path, host } }
+        ? { "httpupgrade-opts": { path: inbound.path, host: hostHeader } }
         : { "ws-opts": wsOpts }),
     };
   }
@@ -55,13 +50,13 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
       name,
       type: "vmess",
       server: addr,
-      port: 443,
+      port: addressPort(addr),
       uuid: user.uuid,
       alterId: 0,
       cipher: "auto",
       udp: true,
       tls: true,
-      servername: host,
+      servername,
       network: "ws",
       "client-fingerprint": user.fingerprint || "chrome",
       alpn,
@@ -72,10 +67,10 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
     name,
     type: "trojan",
     server: addr,
-    port: 443,
+    port: addressPort(addr),
     password: user.password,
     udp: true,
-    sni: host,
+    sni: servername,
     network: "ws",
     "client-fingerprint": user.fingerprint || "chrome",
     alpn,
@@ -117,28 +112,30 @@ export function buildClashConfig(
 
 function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
   const { user, inbound, host } = ctx;
-  const addr = cleanAddr(inbound, host);
+  const addr = resolveAddress(inbound, host);
+  const hostHeader = hostFor(inbound, host);
+  const servername = sniFor(inbound, host);
   // Outbound tags must be unique, so the inbound tag stays as a suffix.
   const tag = `${configName(user)} - ${inbound.tag}`;
   const tls = {
     enabled: true,
-    server_name: host,
+    server_name: servername,
     utls: { enabled: true, fingerprint: user.fingerprint || "chrome" },
     alpn: user.alpn ? user.alpn.split(",").map((a) => a.trim()) : undefined,
   };
   const transport =
     inbound.transport === "xhttp"
-      ? { type: "http", path: inbound.path, host: [host] }
+      ? { type: "http", path: inbound.path, host: [hostHeader] }
       : inbound.transport === "httpupgrade"
-        ? { type: "httpupgrade", path: inbound.path, host }
-        : { type: "ws", path: inbound.path, headers: { Host: host } };
+        ? { type: "httpupgrade", path: inbound.path, host: hostHeader }
+        : { type: "ws", path: inbound.path, headers: { Host: hostHeader } };
 
   if (inbound.protocol === "vless") {
     return {
       type: "vless",
       tag,
       server: addr,
-      server_port: 443,
+      server_port: addressPort(addr),
       uuid: user.uuid,
       tls,
       transport,
@@ -149,7 +146,7 @@ function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
       type: "vmess",
       tag,
       server: addr,
-      server_port: 443,
+      server_port: addressPort(addr),
       uuid: user.uuid,
       alter_id: 0,
       security: "auto",
@@ -161,7 +158,7 @@ function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
     type: "trojan",
     tag,
     server: addr,
-    server_port: 443,
+    server_port: addressPort(addr),
     password: user.password,
     tls,
     transport,
