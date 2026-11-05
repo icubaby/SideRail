@@ -14,6 +14,7 @@ import {
   ArrowDownUp,
   Database,
   Tag,
+  Flag,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
@@ -39,7 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn, formatBytes, relativeTime } from "@/lib/utils";
+import { cn, formatBytes, relativeTime, flagEmoji } from "@/lib/utils";
 import type { AdminInfo, Permission } from "@/lib/types";
 
 const PERMISSION_KEYS: Record<Permission, "dashboard" | "users" | "inbounds" | "routing" | "activityLog" | "telegramBot" | "settings"> = {
@@ -523,6 +524,75 @@ function AdminsCard() {
   );
 }
 
+function LocationCard() {
+  const toast = useToast();
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const [location, setLocation] = React.useState("");
+
+  React.useEffect(() => {
+    if (data) setLocation(data.location || "");
+  }, [data]);
+
+  const mut = useMutation({
+    mutationFn: () => api.updateSettings({ location: location.trim().toUpperCase() }),
+    onSuccess: () => {
+      toast.push("success", t("saved"));
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: (e: Error) => toast.push("error", e.message),
+  });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^[A-Za-z]{2}$/.test(location.trim())) {
+      toast.push("error", t("invalidCountry"));
+      return;
+    }
+    mut.mutate();
+  };
+
+  const flag = flagEmoji(location);
+
+  return (
+    <Card className="card-lift flex h-full flex-col overflow-hidden">
+      <div className="h-1.5 w-full shrink-0 bg-[#7dd3fc]" />
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Flag className="h-5 w-5 text-main" />
+          <CardTitle>{t("locationDefault")}</CardTitle>
+        </div>
+        <CardDescription>{t("locationDesc")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1">
+        <form onSubmit={submit} className="space-y-3">
+          <div className="item-lift flex items-center gap-3 rounded-base border-2 border-border bg-bg/40 p-3">
+            <span className="grid h-10 w-12 shrink-0 place-items-center rounded-base border-2 border-border bg-bw text-xl leading-none">
+              {flag || "—"}
+            </span>
+            <Input
+              value={location}
+              onChange={(e) => setLocation(e.target.value.slice(0, 2).toUpperCase())}
+              placeholder="NL"
+              maxLength={2}
+              spellCheck={false}
+              className="font-mono uppercase"
+            />
+          </div>
+          <div className="rounded-base border-2 border-dashed border-border bg-bg/25 px-3 py-2.5 text-center font-heading text-sm text-text/70">
+            SideRail {flag || "‹flag›"} - Default
+          </div>
+          <Button type="submit" disabled={mut.isPending} className="gap-1.5">
+            <Save className="h-4 w-4" />
+            {mut.isPending ? t("saving") : t("saveChanges")}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { isOwner } = useAuth();
   const { t } = useI18n();
@@ -537,13 +607,16 @@ export default function SettingsPage() {
       />
 
       {isOwner ? (
-        <div className="grid gap-6 lg:grid-cols-5 lg:items-stretch">
-          <div className="lg:col-span-2">
-            <CredentialsCard />
+        <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-5 lg:items-stretch">
+            <div className="lg:col-span-2">
+              <CredentialsCard />
+            </div>
+            <div className="lg:col-span-3">
+              <AdminsCard />
+            </div>
           </div>
-          <div className="lg:col-span-3">
-            <AdminsCard />
-          </div>
+          <LocationCard />
         </div>
       ) : (
         <CredentialsCard />

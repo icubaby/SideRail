@@ -178,6 +178,7 @@ api.patch("/inbounds/:id", requirePermission("inbounds"), async (req: AuthedRequ
     type: z.enum(["socks4", "socks5", "http"]),
     country: z.string().max(10).optional(),
     ms: z.number().int().min(0).optional(),
+    active: z.boolean().optional(),
   });
   const body = z
     .object({
@@ -428,18 +429,23 @@ api.get("/settings", requirePermission("settings"), (_req, res) => {
   res.json({
     xrayVersion: getSetting("xray_version") || "",
     subTitle: getSetting("sub_title") || "SideRail",
+    location: getSetting("location") || "NL",
   });
 });
 
 api.put("/settings", requirePermission("settings"), (req: AuthedRequest, res) => {
   const body = z
-    .object({ subTitle: z.string().optional() })
+    .object({
+      subTitle: z.string().optional(),
+      location: z.string().regex(/^[A-Za-z]{2}$/, "invalid country code").optional(),
+    })
     .safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: "invalid" });
     return;
   }
   if (body.data.subTitle !== undefined) setSetting("sub_title", body.data.subTitle);
+  if (body.data.location !== undefined) setSetting("location", body.data.location.toUpperCase());
   logActivity(req.admin!.username, "settings_update", "");
   res.json({ ok: true });
 });

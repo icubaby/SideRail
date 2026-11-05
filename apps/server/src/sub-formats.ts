@@ -1,5 +1,5 @@
 import type { Inbound, UserWithInbounds } from "./types.js";
-import { configName } from "./links.js";
+import { configName, inboundFlag } from "./links.js";
 import { resolveAddress, resolvePort, sniFor, hostFor } from "./links.js";
 
 interface Ctx {
@@ -18,7 +18,7 @@ function clashProxy(ctx: Ctx): Record<string, unknown> | null {
   const hostHeader = hostFor(inbound, host);
   const servername = sniFor(inbound, host);
   // Clash proxy names must be unique, so the inbound tag stays as a suffix.
-  const name = `${configName(user)} - ${inbound.tag}`;
+  const name = `${configName(user, inboundFlag(inbound))} - ${inbound.tag}`;
   const alpn = user.alpn ? user.alpn.split(",").map((a) => a.trim()) : undefined;
   const wsOpts = {
     path: inbound.path,
@@ -116,7 +116,7 @@ function singboxOutbound(ctx: Ctx): Record<string, unknown> | null {
   const hostHeader = hostFor(inbound, host);
   const servername = sniFor(inbound, host);
   // Outbound tags must be unique, so the inbound tag stays as a suffix.
-  const tag = `${configName(user)} - ${inbound.tag}`;
+  const tag = `${configName(user, inboundFlag(inbound))} - ${inbound.tag}`;
   const tls = {
     enabled: true,
     server_name: servername,

@@ -3,7 +3,7 @@ export type Transport = "ws" | "xhttp" | "httpupgrade";
 export type TrafficReset = "never" | "daily" | "weekly" | "monthly";
 export type ProxyType = "socks4" | "socks5" | "http";
 
-/** A SOCKS4/5 or HTTP proxy entry used as a per-inbound address override. */
+/** A SOCKS4/5 or HTTP relay entry pinned as this inbound's egress when active. */
 export interface ProxyItem {
   ip: string;
   port: number;
@@ -12,6 +12,8 @@ export interface ProxyItem {
   country?: string;
   /** Last known ping latency in ms (0 = unreachable). */
   ms?: number;
+  /** True when this entry drives the inbound's egress (traffic exits through it). */
+  active?: boolean;
 }
 
 export type Permission =

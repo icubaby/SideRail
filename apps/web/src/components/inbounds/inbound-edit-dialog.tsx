@@ -184,9 +184,10 @@ export function InboundEditDialog({
     });
   };
 
-  const useProxy = (p: ProxyItem) => {
-    setAddress(`${p.ip}:${p.port}`);
-    toast.push("success", `${p.ip}:${p.port} ✓`);
+  const useProxy = (target: ProxyItem) => {
+    const tk = keyOf(target);
+    setProxies((prev) => prev.map((p) => ({ ...p, active: keyOf(p) === tk })));
+    toast.push("success", `${target.ip}:${target.port} ✓`);
   };
 
   const scan = async (sourceId: string, label: string) => {
@@ -578,7 +579,8 @@ export function InboundEditDialog({
               )}
               {filtered.map((p) => {
                 const k = keyOf(p);
-                const active = address === `${p.ip}:${p.port}`;
+                const active =
+                  Boolean(p.active) || address === `${p.ip}:${p.port}`;
                 const pingState = pings[k];
                 const pAccent = PROXY_ACCENT[p.type];
                 return (

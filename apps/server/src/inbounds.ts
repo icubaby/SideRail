@@ -73,6 +73,38 @@ export function getInbound(id: number): Inbound | undefined {
   return row ? decode(row) : undefined;
 }
 
+/** The relay pinned as this inbound's egress (its traffic exits through it), if any. */
+export function activeProxy(inbound: Inbound): ProxyItem | null {
+  if (!Array.isArray(inbound.proxies) || inbound.proxies.length === 0) return null;
+  const marked = inbound.proxies.find((p) => p.active === true);
+  if (marked) return marked;
+  // Legacy: the old "Use" flow wrote the relay as "ip:port" into the address field.
+  const a = (inbound.address || "").trim();
+  if (a) {
+    const legacy = inbound.proxies.find((p) => `${p.ip}:${p.port}` === a);
+    if (legacy) return legacy;
+  }
+  return null;
+}
+
+/**
+ * One-time migration for pre-4.5 relay state: when an inbound's address is exactly
+ * an entry's "ip:port", move that entry to active and clear the address so links
+ * keep the panel default and the core routes that inbound out through the relay.
+ */
+export function normalizeInboundProxyState(): void {
+  for (const inbound of listInbounds()) {
+    if (!Array.isArray(inbound.proxies) || inbound.proxies.length === 0) continue;
+    if (inbound.proxies.some((p) => p.active === true)) continue;
+    const a = (inbound.address || "").trim();
+    if (!a) continue;
+    const idx = inbound.proxies.findIndex((p) => `${p.ip}:${p.port}` === a);
+    if (idx < 0) continue;
+    const proxies = inbound.proxies.map((p, i) => ({ ...p, active: i === idx }));
+    updateInbound(inbound.id, { address: "", proxies });
+  }
+}
+
 export function setInboundEnabled(id: number, enabled: boolean): void {
   db.prepare("UPDATE inbounds SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
 }

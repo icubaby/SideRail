@@ -9,7 +9,7 @@
  * Watermark: sr-icubaby-2025-9f4c1a7e
  */
 import { config } from "./config.js";
-import { listEnabledInbounds } from "./inbounds.js";
+import { listEnabledInbounds, activeProxy } from "./inbounds.js";
 import { listUsers, isUserActive } from "./users.js";
 import { listRoutingRules } from "./routing.js";
 import type { Inbound, UserWithInbounds } from "./types.js";
@@ -78,9 +78,28 @@ function buildRoutingRules(inbounds: Inbound[]) {
   return rules;
 }
 
+/** Per-inbound egress relays: one SOCKS/HTTP outbound + routing rule per pinned relay. */
+function buildEgress(inbounds: Inbound[]) {
+  const outbounds: Record<string, unknown>[] = [];
+  const rules: Record<string, unknown>[] = [];
+  for (const ib of inbounds) {
+    const pr = activeProxy(ib);
+    if (!pr) continue;
+    const tag = `egress-${ib.tag}`;
+    outbounds.push({
+      tag,
+      protocol: pr.type === "http" ? "http" : "socks",
+      settings: { servers: [{ address: pr.ip, port: pr.port }] },
+    });
+    rules.push({ type: "field", inboundTag: [ib.tag], outboundTag: tag });
+  }
+  return { outbounds, rules };
+}
+
 export function buildCoreConfig() {
   const inbounds = listEnabledInbounds();
   const users = listUsers();
+  const egress = buildEgress(inbounds);
 
   const inboundConfigs = inbounds.map((ib) => ({
     tag: ib.tag,
@@ -118,11 +137,12 @@ export function buildCoreConfig() {
     ],
     outbounds: [
       { tag: "direct", protocol: "freedom", settings: {} },
+      ...egress.outbounds,
       { tag: "blocked", protocol: "blackhole", settings: {} },
     ],
     routing: {
       domainStrategy: "AsIs",
-      rules: buildRoutingRules(inbounds),
+      rules: [...buildRoutingRules(inbounds), ...egress.rules],
     },
   };
 }

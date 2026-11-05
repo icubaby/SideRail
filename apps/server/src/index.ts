@@ -16,7 +16,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { config } from "./config.js";
 import { migrate } from "./db.js";
-import { seedInbounds } from "./inbounds.js";
+import { seedInbounds, normalizeInboundProxyState } from "./inbounds.js";
 import { seedDefaultClient } from "./users.js";
 import { seedDefaultRouting } from "./routing.js";
 import { api } from "./routes.js";
@@ -34,6 +34,7 @@ console.log(SIDERAIL_SIGNATURE);
 
 migrate();
 seedInbounds();
+normalizeInboundProxyState();
 seedDefaultClient();
 seedDefaultRouting();
 enforceAdminExpiry();

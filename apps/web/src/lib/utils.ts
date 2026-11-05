@@ -16,6 +16,13 @@ export function d(encoded: string): string {
   }
 }
 
+/** ISO 3166-1 alpha-2 code -> regional-indicator flag emoji ("" when not a valid code). */
+export function flagEmoji(code: string): string {
+  const c = (code || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return "";
+  return String.fromCodePoint(...[...c].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 0x41));
+}
+
 export function formatBytes(bytes: number, decimals = 2): string {
   if (!bytes || bytes <= 0) return "0 B";
   const k = 1024;

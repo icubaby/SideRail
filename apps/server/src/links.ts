@@ -9,6 +9,7 @@
  * Watermark: sr-icubaby-2025-9f4c1a7e
  */
 import { getSetting } from "./db.js";
+import { activeProxy } from "./inbounds.js";
 import type { Inbound, UserWithInbounds } from "./types.js";
 
 interface LinkContext {
@@ -17,12 +18,13 @@ interface LinkContext {
   port: number;
   hostHeader: string;
   sni: string;
+  flag: string;
   user: UserWithInbounds;
   inbound: Inbound;
 }
 
-function label(user: UserWithInbounds): string {
-  return configName(user);
+function label(user: UserWithInbounds, flag: string): string {
+  return configName(user, flag);
 }
 
 /**
@@ -42,9 +44,32 @@ export function toBoldAscii(input: string): string {
   return out;
 }
 
-/** Config / subscription name: 𝗦𝗶𝗱𝗲𝗥𝗮𝗶𝗹 - <client name> */
-export function configName(user: UserWithInbounds): string {
-  return `${toBoldAscii("SideRail")} - ${toBoldAscii(user.email)}`;
+/** Config / subscription name: 𝗦𝗶𝗱𝗲𝗥𝗮𝗶𝗹 <flag> - <client name> */
+export function configName(user: UserWithInbounds, flag?: string): string {
+  const f = (flag || "").trim();
+  return f
+    ? `${toBoldAscii("SideRail")} ${f} - ${toBoldAscii(user.email)}`
+    : `${toBoldAscii("SideRail")} - ${toBoldAscii(user.email)}`;
+}
+
+/** ISO 3166-1 alpha-2 code -> regional-indicator flag emoji ("" when not a valid code). */
+export function countryFlag(code: string): string {
+  const c = (code || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return "";
+  return String.fromCodePoint(...[...c].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 0x41));
+}
+
+/**
+ * Flag for an inbound's config names: the pinned egress relay's country when one
+ * is active, otherwise the panel's default location.
+ */
+export function inboundFlag(inbound: Inbound): string {
+  const pr = activeProxy(inbound);
+  if (pr && pr.country) {
+    const f = countryFlag(pr.country);
+    if (f) return f;
+  }
+  return countryFlag(getSetting("location") || "NL");
 }
 
 /**
@@ -98,14 +123,14 @@ function qs(params: Record<string, string>): string {
 function vlessLink(ctx: LinkContext): string {
   const { user, address, port } = ctx;
   const query = qs({ ...commonQuery(ctx), encryption: "none" });
-  return `vless://${user.uuid}@${address}:${port}?${query}#${encodeURIComponent(label(user))}`;
+  return `vless://${user.uuid}@${address}:${port}?${query}#${encodeURIComponent(label(user, ctx.flag))}`;
 }
 
 function trojanLink(ctx: LinkContext): string {
   const { user, address, port } = ctx;
   const query = qs(commonQuery(ctx));
   return `trojan://${encodeURIComponent(user.password)}@${address}:${port}?${query}#${encodeURIComponent(
-    label(user),
+    label(user, ctx.flag),
   )}`;
 }
 
@@ -114,7 +139,7 @@ function vmessLink(ctx: LinkContext): string {
   const isXhttp = inbound.transport === "xhttp";
   const obj = {
     v: "2",
-    ps: label(user),
+    ps: label(user, ctx.flag),
     add: ctx.address,
     port: String(port),
     id: user.uuid,
@@ -208,6 +233,7 @@ export function buildUserLinks(
           port,
           hostHeader: hostFor(inbound, host),
           sni: sniFor(inbound, host),
+          flag: inboundFlag(inbound),
           user,
           inbound,
         }),

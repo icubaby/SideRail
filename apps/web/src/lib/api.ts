@@ -123,8 +123,8 @@ export const api = {
     request<{ ip: string; last_seen: number }[]>(`/api/users/${id}/ips`),
   activity: () => request<import("./types").ActivityEntry[]>("/api/activity"),
   clearActivity: () => request("/api/activity", { method: "DELETE" }),
-  settings: () => request<{ subTitle: string }>("/api/settings"),
-  updateSettings: (payload: { subTitle?: string }) =>
+  settings: () => request<{ subTitle: string; location: string }>("/api/settings"),
+  updateSettings: (payload: { subTitle?: string; location?: string }) =>
     request("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),
   changeCredentials: (payload: {
     currentPassword: string;
