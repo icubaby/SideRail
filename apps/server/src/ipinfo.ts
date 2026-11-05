@@ -3,6 +3,7 @@ import https from "node:https";
 interface IpInfo {
   ip: string;
   location: string;
+  country: string;
   isp: string;
 }
 
@@ -41,7 +42,12 @@ export async function refreshIpInfo(): Promise<void> {
   let isp = typeof data.org === "string" ? data.org : "";
   isp = isp.replace(/^AS\d+\s+/, "").trim();
   if (ip) {
-    cached = { ip, location: location || "Unknown", isp: isp || "Unknown" };
+    cached = {
+      ip,
+      location: location || "Unknown",
+      country: (country || "").toUpperCase(),
+      isp: isp || "Unknown",
+    };
     cachedAt = Date.now();
   }
 }
@@ -49,5 +55,12 @@ export async function refreshIpInfo(): Promise<void> {
 export function getIpInfo(): IpInfo {
   if (cached && Date.now() - cachedAt < 6 * 3_600_000) return cached;
   void refreshIpInfo();
-  return cached || { ip: "", location: "", isp: "" };
+  return cached || { ip: "", location: "", country: "", isp: "" };
+}
+
+/** ISO alpha-2 country code of the server itself (auto-detected via geo lookup). */
+export function getServerCountryCode(): string {
+  if (cached && Date.now() - cachedAt < 6 * 3_600_000) return cached.country;
+  void refreshIpInfo();
+  return cached?.country || "";
 }

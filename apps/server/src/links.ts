@@ -10,6 +10,7 @@
  */
 import { getSetting } from "./db.js";
 import { activeProxy } from "./inbounds.js";
+import { getServerCountryCode } from "./ipinfo.js";
 import type { Inbound, UserWithInbounds } from "./types.js";
 
 interface LinkContext {
@@ -61,7 +62,8 @@ export function countryFlag(code: string): string {
 
 /**
  * Flag for an inbound's config names: the pinned egress relay's country when one
- * is active, otherwise the panel's default location.
+ * is active, otherwise the panel's location — a manually set default, or the
+ * detected country of the server itself (Railway deploys, e.g. US/SG/NL).
  */
 export function inboundFlag(inbound: Inbound): string {
   const pr = activeProxy(inbound);
@@ -69,7 +71,9 @@ export function inboundFlag(inbound: Inbound): string {
     const f = countryFlag(pr.country);
     if (f) return f;
   }
-  return countryFlag(getSetting("location") || "NL");
+  const manual = countryFlag(getSetting("location") || "");
+  if (manual) return manual;
+  return countryFlag(getServerCountryCode());
 }
 
 /**

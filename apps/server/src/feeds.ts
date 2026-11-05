@@ -200,23 +200,98 @@ export async function geocodeProxy(item: ProxyItem): Promise<ProxyItem> {
   return { ...item, country: cc || "" };
 }
 
-/** Latency test: raw TCP connect to ip:port, resolves with elapsed ms. */
-export function testProxy(ip: string, port: number, timeout = 4000): Promise<{ ok: boolean; ms: number }> {
+/**
+ * Real egress latency test: dial the relay from the panel and tunnel a connect
+ * to a stable public target through it (the way the core uses it). Relays that
+ * accept TCP but cannot actually route traffic fail here.
+ */
+const TARGET_HOST = "1.1.1.1";
+const TARGET_PORT = 80;
+
+export function testProxy(
+  ip: string,
+  port: number,
+  type: ProxyType = "socks5",
+  timeout = 4500,
+): Promise<{ ok: boolean; ms: number }> {
   return new Promise((resolve) => {
     const start = Date.now();
     const sock = net.connect({ host: ip, port });
+    let done = false;
+    let buf = Buffer.alloc(0);
+    let greeted = false; // socks5 auth/greeting done
+
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      sock.destroy();
+      resolve(ok ? { ok: true, ms: Date.now() - start } : { ok: false, ms: 0 });
+    };
+
     sock.setTimeout(timeout);
+    sock.once("timeout", () => finish(false));
+    sock.once("error", () => finish(false));
     sock.once("connect", () => {
-      sock.destroy();
-      resolve({ ok: true, ms: Date.now() - start });
+      try {
+        const ipB = ip.split(".").map(Number);
+        if (type === "socks5") {
+          sock.write(Buffer.from([0x05, 0x01, 0x00])); // no-auth greeting
+        } else if (type === "socks4") {
+          sock.write(
+            Buffer.from([
+              0x04, 0x01, (TARGET_PORT >> 8) & 0xff, TARGET_PORT & 0xff,
+              ...ipB, 0x00,
+            ]),
+          );
+        } else {
+          sock.write(
+            `CONNECT ${TARGET_HOST}:${TARGET_PORT} HTTP/1.1\r\nHost: ${TARGET_HOST}:${TARGET_PORT}\r\n\r\n`,
+          );
+        }
+      } catch {
+        finish(false);
+      }
     });
-    sock.once("timeout", () => {
-      sock.destroy();
-      resolve({ ok: false, ms: 0 });
-    });
-    sock.once("error", () => {
-      sock.destroy();
-      resolve({ ok: false, ms: 0 });
+
+    sock.on("data", (chunk: Buffer) => {
+      try {
+        if (type === "socks5") {
+          if (!greeted) {
+            if (buf.length + chunk.length < 2) {
+              buf = Buffer.concat([buf, chunk]);
+              return;
+            }
+            buf = Buffer.concat([buf, chunk]);
+            if (buf[0] !== 0x05 || buf[1] === 0xff) return finish(false);
+            greeted = true;
+            buf = Buffer.alloc(0);
+            const ipB = TARGET_HOST.split(".").map(Number);
+            sock.write(
+              Buffer.from([
+                0x05, 0x01, 0x00, 0x01,
+                ...ipB, (TARGET_PORT >> 8) & 0xff, TARGET_PORT & 0xff,
+              ]),
+            );
+            return;
+          }
+          buf = Buffer.concat([buf, chunk]);
+          if (buf.length >= 2) {
+            if (buf[0] !== 0x05 || buf[1] !== 0x00) return finish(false);
+            finish(true);
+          }
+        } else if (type === "socks4") {
+          buf = Buffer.concat([buf, chunk]);
+          if (buf.length >= 8) finish(buf[1] === 0x5a);
+        } else {
+          buf = Buffer.concat([buf, chunk]);
+          const end = buf.indexOf("\r\n\r\n");
+          if (end >= 0) {
+            finish(/^HTTP\/\d\.\d\s+2\d\d/i.test(buf.subarray(0, end).toString("latin1")));
+          }
+        }
+      } catch {
+        finish(false);
+      }
     });
   });
 }

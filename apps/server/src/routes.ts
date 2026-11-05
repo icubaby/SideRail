@@ -55,6 +55,7 @@ import {
 import { DOMAIN_PRESETS, COUNTRY_IP_PRESETS } from "./routing-presets.js";
 import { getBotConfig, saveBotConfig, testBot } from "./bot.js";
 import { PROXY_SOURCES, scanProxies, testProxy, geocodeProxy } from "./feeds.js";
+import { getServerCountryCode } from "./ipinfo.js";
 import type { ProxyItem } from "./types.js";
 
 export const api = Router();
@@ -249,13 +250,14 @@ api.post("/proxies/test", requirePermission("inbounds"), async (req: AuthedReque
     .object({
       ip: z.string().min(1).max(45),
       port: z.number().int().min(1).max(65535),
+      type: z.enum(["socks4", "socks5", "http"]).optional(),
     })
     .safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: "invalid input" });
     return;
   }
-  const result = await testProxy(body.data.ip, body.data.port);
+  const result = await testProxy(body.data.ip, body.data.port, body.data.type ?? "socks5");
   res.json(result);
 });
 
@@ -429,7 +431,7 @@ api.get("/settings", requirePermission("settings"), (_req, res) => {
   res.json({
     xrayVersion: getSetting("xray_version") || "",
     subTitle: getSetting("sub_title") || "SideRail",
-    location: getSetting("location") || "NL",
+    location: getSetting("location") || getServerCountryCode() || "",
   });
 });
 
@@ -437,7 +439,7 @@ api.put("/settings", requirePermission("settings"), (req: AuthedRequest, res) =>
   const body = z
     .object({
       subTitle: z.string().optional(),
-      location: z.string().regex(/^[A-Za-z]{2}$/, "invalid country code").optional(),
+      location: z.string().regex(/^[A-Za-z]{0,2}$/, "invalid country code").optional(),
     })
     .safeParse(req.body);
   if (!body.success) {
@@ -445,7 +447,7 @@ api.put("/settings", requirePermission("settings"), (req: AuthedRequest, res) =>
     return;
   }
   if (body.data.subTitle !== undefined) setSetting("sub_title", body.data.subTitle);
-  if (body.data.location !== undefined) setSetting("location", body.data.location.toUpperCase());
+  if (body.data.location !== undefined) setSetting("location", body.data.location.trim().toUpperCase());
   logActivity(req.admin!.username, "settings_update", "");
   res.json({ ok: true });
 });
