@@ -546,14 +546,16 @@ function LocationCard() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^[A-Za-z]{2}$/.test(location.trim())) {
+    const v = location.trim().toUpperCase();
+    if (v && !/^[A-Za-z]{2}$/.test(v)) {
       toast.push("error", t("invalidCountry"));
       return;
     }
     mut.mutate();
   };
 
-  const flag = flagEmoji(location);
+  const flag = flagEmoji(location.trim());
+  const auto = location.trim().length === 0;
 
   return (
     <Card className="card-lift flex h-full flex-col overflow-hidden">
@@ -574,14 +576,20 @@ function LocationCard() {
             <Input
               value={location}
               onChange={(e) => setLocation(e.target.value.slice(0, 2).toUpperCase())}
-              placeholder="NL"
+              placeholder={t("locationAuto")}
               maxLength={2}
               spellCheck={false}
               className="font-mono uppercase"
             />
           </div>
           <div className="rounded-base border-2 border-dashed border-border bg-bg/25 px-3 py-2.5 text-center font-heading text-sm text-text/70">
-            SideRail {flag || "‹flag›"} - Default
+            {auto ? (
+              <span className="text-text/50">
+                {t("locationAuto")} — SideRail - Default
+              </span>
+            ) : (
+              <>SideRail {flag} - Default</>
+            )}
           </div>
           <Button type="submit" disabled={mut.isPending} className="gap-1.5">
             <Save className="h-4 w-4" />

@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CountryFlag } from "@/components/country-flag";
-import { cn, d } from "@/lib/utils";
+import { cn, d, flagEmoji } from "@/lib/utils";
 import type { Inbound, ProxyItem, ProxyType } from "@/lib/types";
 
 // Obfuscated English words (base64) — rendered via d()
@@ -164,11 +164,13 @@ export function InboundEditDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, inbound]);
 
-  const counts = React.useMemo(() => {
-    const c: Record<ProxyType, number> = { socks4: 0, socks5: 0, http: 0 };
-    for (const p of proxies) c[p.type]++;
-    return c;
-  }, [proxies]);
+  // The relay currently pinned as this inbound's egress (its flag decorates the tab).
+  const activeRelayFlag = React.useMemo(() => {
+    const active = proxies.find(
+      (p) => p.active === true || (address && `${p.ip}:${p.port}` === address),
+    );
+    return active && active.country ? flagEmoji(active.country) : "";
+  }, [proxies, address]);
 
   const filtered =
     filter === "all" ? proxies : proxies.filter((p) => p.type === filter);
@@ -186,8 +188,10 @@ export function InboundEditDialog({
 
   const useProxy = (target: ProxyItem) => {
     const tk = keyOf(target);
-    setProxies((prev) => prev.map((p) => ({ ...p, active: keyOf(p) === tk })));
-    toast.push("success", `${target.ip}:${target.port} ✓`);
+    const next = proxies.map((p) => ({ ...p, active: keyOf(p) === tk }));
+    setProxies(next);
+    // Auto-persist: no need to scroll down and hit Save — pinning a relay saves immediately.
+    void onSave({ address: address.trim(), host: host.trim(), sni: sni.trim(), proxies: next });
   };
 
   const scan = async (sourceId: string, label: string) => {
@@ -240,7 +244,7 @@ export function InboundEditDialog({
     const k = keyOf(p);
     setPings((prev) => ({ ...prev, [k]: "pinging" }));
     try {
-      const r = await api.proxyTest(p.ip, p.port);
+      const r = await api.proxyTest(p.ip, p.port, p.type);
       setPings((prev) => ({ ...prev, [k]: r.ok && r.ms > 0 ? r.ms : "fail" }));
       setProxies((prev) =>
         prev.map((x) => (keyOf(x) === k ? { ...x, ms: r.ok && r.ms > 0 ? r.ms : 0 } : x)),
@@ -319,9 +323,12 @@ export function InboundEditDialog({
             <TabsTrigger value="proxy" className="flex-1">
               <Router className="mr-1.5 h-3.5 w-3.5" />
               {TXT_PROXY}
-              {proxies.length > 0 && (
-                <span className="ml-1 rounded-full bg-mtext/15 px-1.5 text-[10px]">
-                  {proxies.length}
+              {activeRelayFlag && (
+                <span
+                  className="ml-1 rounded-full bg-mtext/15 px-1.5 text-[10px]"
+                  title={t("activeExit")}
+                >
+                  {activeRelayFlag}
                 </span>
               )}
             </TabsTrigger>
@@ -513,7 +520,6 @@ export function InboundEditDialog({
                   {(["all", ...PROXY_TYPES] as const).map((f) => {
                     const label =
                       f === "all" ? t("all") : PROTOCOL_LABEL[f as ProxyType];
-                    const c = f === "all" ? proxies.length : counts[f];
                     return (
                       <Button
                         key={f}
@@ -529,7 +535,6 @@ export function InboundEditDialog({
                         )}
                       >
                         {label}
-                        <span className="text-[10px] opacity-60">{c}</span>
                       </Button>
                     );
                   })}
@@ -583,6 +588,7 @@ export function InboundEditDialog({
                   Boolean(p.active) || address === `${p.ip}:${p.port}`;
                 const pingState = pings[k];
                 const pAccent = PROXY_ACCENT[p.type];
+                const dead = !active && typeof p.ms === "number" && p.ms === 0;
                 return (
                   <div
                     key={k}
@@ -643,9 +649,13 @@ export function InboundEditDialog({
                         variant="ghost"
                         size="sm"
                         onClick={() => useProxy(p)}
-                        title={t("use")}
+                        title={
+                          dead ? "✕" : t("use")
+                        }
+                        disabled={dead}
                         className={cn(
                           "h-8 gap-1 px-2 text-[11px] [&_svg]:size-3.5",
+                          dead && "cursor-not-allowed opacity-40",
                           active
                             ? "bg-emerald-300 text-black hover:bg-emerald-200 hover:text-black"
                             : "text-text/60 hover:bg-main/20",

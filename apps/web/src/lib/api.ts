@@ -85,10 +85,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ source }),
     }),
-  proxyTest: (ip: string, port: number) =>
+  proxyTest: (ip: string, port: number, type: import("./types").ProxyType = "socks5") =>
     request<{ ok: boolean; ms: number }>("/api/proxies/test", {
       method: "POST",
-      body: JSON.stringify({ ip, port }),
+      body: JSON.stringify({ ip, port, type }),
     }),
   proxyCheck: (ip: string, port: number, type: import("./types").ProxyType) =>
     request<{ ok: boolean; item: import("./types").ProxyItem }>("/api/proxies/check", {

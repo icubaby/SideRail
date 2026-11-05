@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { InboundEditDialog } from "@/components/inbounds/inbound-edit-dialog";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn, formatBytes, flagEmoji } from "@/lib/utils";
 import type { Inbound, ProxyItem } from "@/lib/types";
 
 const protocolAccent: Record<string, string> = {
@@ -18,6 +18,22 @@ const protocolAccent: Record<string, string> = {
   vmess: "#7dd3fc",
   trojan: "#fbbf24",
 };
+
+/** Rough detection of Cloudflare clean-IP ranges used as address overrides. */
+function isCloudflareIp(ip: string): boolean {
+  const o = ip.split(".").map(Number);
+  if (o.length !== 4 || o.some((n) => Number.isNaN(n))) return false;
+  const [a, b] = o;
+  return (
+    (a === 1 && b === 1) ||
+    (a === 104 && b >= 16 && b <= 31) ||
+    (a === 172 && b >= 64 && b <= 71) ||
+    (a === 162 && b === 159) ||
+    (a === 188 && b === 114) ||
+    (a === 197 && b === 234) ||
+    (a === 198 && b === 41)
+  );
+}
 
 export default function InboundsPage() {
   const toast = useToast();
@@ -92,7 +108,32 @@ export default function InboundsPage() {
             remLg === 1 && isLast && "lg:col-span-6",
             remLg === 2 && isLastTwo && "lg:col-span-3",
           );
-          const proxyCount = Array.isArray(ib.proxies) ? ib.proxies.length : 0;
+          const addressOverride = (ib.address || "").trim();
+          const activeRelay = (Array.isArray(ib.proxies) ? ib.proxies : []).find(
+            (pr) =>
+              pr.active === true || (addressOverride && `${pr.ip}:${pr.port}` === addressOverride),
+          );
+          const exitFlag = activeRelay && activeRelay.country ? flagEmoji(activeRelay.country) : "";
+          const exitAlive =
+            !!activeRelay &&
+            exitFlag !== "" &&
+            typeof activeRelay.ms === "number" &&
+            activeRelay.ms > 0;
+          const sourceLabel = addressOverride
+            ? /^69\.46\.46\./.test(addressOverride)
+              ? "Railway"
+              : isCloudflareIp(addressOverride)
+                ? "Cloudflare"
+                : "Custom"
+            : "";
+          const statusChip =
+            sourceLabel && exitAlive
+              ? `${sourceLabel} + exit ${exitFlag}`
+              : sourceLabel
+                ? sourceLabel
+                : exitAlive
+                  ? `exit ${exitFlag}`
+                  : "";
           return (
             <Card
               key={ib.id}
@@ -163,12 +204,12 @@ export default function InboundsPage() {
                   >
                     {ib.address || t("auto")}
                   </span>
-                  {proxyCount > 0 && (
+                  {statusChip && (
                     <Badge
                       variant="info"
                       className="hidden shrink-0 gap-1 px-1.5 py-0 text-[9px] sm:inline-flex"
                     >
-                      {proxyCount}
+                      {statusChip}
                     </Badge>
                   )}
                   <Button
