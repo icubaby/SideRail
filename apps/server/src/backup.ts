@@ -51,10 +51,15 @@ export function importData(payload: BackupPayload): { users: number; inbounds: n
     db.exec("DELETE FROM user_inbounds; DELETE FROM users; DELETE FROM inbounds;");
 
     const insInbound = db.prepare(
-      `INSERT INTO inbounds (id, tag, protocol, transport, port, path, host, address, enabled, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO inbounds (id, tag, protocol, transport, port, path, host, sni, address, proxies, enabled, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const ib of payload.inbounds) {
+      const proxiesRaw = Array.isArray(ib.proxies)
+        ? JSON.stringify(ib.proxies)
+        : typeof ib.proxies === "string" && ib.proxies
+          ? (ib.proxies as string)
+          : "[]";
       insInbound.run(
         ib.id,
         ib.tag,
@@ -63,7 +68,9 @@ export function importData(payload: BackupPayload): { users: number; inbounds: n
         ib.port,
         ib.path,
         ib.host,
+        ib.sni ?? "",
         ib.address ?? "",
+        proxiesRaw,
         ib.enabled,
         ib.created_at,
       );
@@ -74,7 +81,7 @@ export function importData(payload: BackupPayload): { users: number; inbounds: n
         (id, email, uuid, password, sub_token, fingerprint, alpn, fragment, ech_config, data_limit,
          ip_limit, expire_at, sub_expire_days, sub_first_seen, traffic_reset, telegram_id,
          comment, enabled, up, down, last_reset, online_at, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const u of payload.users) {
       insUser.run(
